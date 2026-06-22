@@ -1,0 +1,10 @@
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.wrangler/
+worker/node_modules/
+worker/.wrangler/
+worker/wrangler.toml
+dist/
+.dev.vars
+*.local

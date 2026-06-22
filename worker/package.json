@@ -1,0 +1,19 @@
+{
+  "name": "airflux-worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate": "wrangler d1 execute airflux --file=./src/db/schema.sql"
+  },
+  "dependencies": {
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.202412.0",
+    "typescript": "~5.7.0",
+    "wrangler": "^4.99.0"
+  }
+}
