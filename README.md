@@ -1,6 +1,6 @@
 # AirFlux
 
-部署在 [Cloudflare Workers](https://workers.cloudflare.com/) 上的基于 Web 的文件传输工具。
+部署在 [Cloudflare Workers](https://workers.cloudflare.com/) 上的 Web 的文件传输工具。
 
 ## 功能特性
 
