@@ -11,6 +11,7 @@ import { useSenderChannel } from '../hooks/useSenderChannel'
 import { useSenderConnections, SenderConnection } from '../hooks/useSenderConnections'
 import { createPickupCode, uploadFileForPickup, savePickupFiles } from '../lib/api'
 import { TransferMode } from '../types'
+import { formatSpeed } from '../lib/utils'
 
 function ShareLinkSection({ code }: { code: string }) {
   const [copiedLink, setCopiedLink] = useState(false)
@@ -405,12 +406,6 @@ function TextP2PInner({
   )
 }
 
-function formatSpeed(bytesPerSec: number): string {
-  if (bytesPerSec >= 1048576) return `${(bytesPerSec / 1048576).toFixed(1)} MB/s`
-  if (bytesPerSec >= 1024) return `${(bytesPerSec / 1024).toFixed(1)} KB/s`
-  return `${bytesPerSec.toFixed(0)} B/s`
-}
-
 interface Props {
   onBack: () => void
   preloadedFiles?: File[] | null
@@ -626,10 +621,13 @@ function SharingInner({
                       />
                     </div>
                   )}
-                  <div className="text-xs text-slate-400 mt-1">
-                    {connections.length > 0
-                      ? `${connections.filter((c) => c.status === 'done').length}/${connections.length} 传输完成`
-                      : '0 个连接'}
+                  <div className="flex justify-between text-xs text-slate-400 mt-1">
+                    <span>{activeConn?.speed && activeConn.speed > 0 ? formatSpeed(activeConn.speed) : ''}</span>
+                    <span>
+                      {connections.length > 0
+                        ? `${connections.filter((c) => c.status === 'done').length}/${connections.length} 传输完成`
+                        : '0 个连接'}
+                    </span>
                   </div>
                 </div>
               </div>

@@ -5,7 +5,7 @@ import { ArrowLeft, ArrowDownFromLine, LoaderIcon, FileIcon, CheckIcon, WifiIcon
 import WebRTCProvider from '../components/WebRTCProvider'
 import { useReceiver } from '../hooks/useReceiver'
 import { lookupPickupCode, getDownloadUrls } from '../lib/api'
-import { getExpiryLabel, formatFileSize } from '../lib/utils'
+import { getExpiryLabel, formatFileSize, formatSpeed } from '../lib/utils'
 
 interface Props { onBack: () => void; initialCode?: string | null }
 
@@ -228,6 +228,9 @@ function DownloadView({ peerId, note, onBack }: { peerId: string; note: string |
               <div className="flex justify-between text-xs text-slate-400 mb-1">
                 <span>下载进度</span>
                 <span>{formatFileSize(state.downloadedBytes)} / {formatFileSize(state.totalBytes)}</span>
+              </div>
+              <div className="flex justify-between text-xs text-slate-400 mb-1">
+                <span>{state.speed > 0 ? formatSpeed(state.speed) : ''}</span>
               </div>
               <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
                 <div

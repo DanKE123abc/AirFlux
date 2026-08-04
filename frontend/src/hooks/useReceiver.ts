@@ -10,6 +10,7 @@ interface ReceiverState {
   progress: number
   totalBytes: number
   downloadedBytes: number
+  speed: number
   error: string | null
 }
 
@@ -22,12 +23,15 @@ export function useReceiver(targetPeerId: string | null) {
     progress: 0,
     totalBytes: 0,
     downloadedBytes: 0,
+    speed: 0,
     error: null,
   })
   const connRef = useRef<DataConnection | null>(null)
   const chunksRef = useRef<Map<string, BlobPart[]>>(new Map())
   const totalBytesRef = useRef(0)
   const downloadedRef = useRef(0)
+  const lastChunkTimeRef = useRef(0)
+  const lastChunkBytesRef = useRef(0)
   const filesRef = useRef<Array<{ fileName: string; size: number; type: string }> | null>(null)
   const nextFileIndexRef = useRef(0)
 
@@ -55,6 +59,8 @@ export function useReceiver(targetPeerId: string | null) {
     const conn = peer.connect(targetPeerId, { reliable: true })
     connRef.current = conn
     downloadedRef.current = 0
+    lastChunkTimeRef.current = 0
+    lastChunkBytesRef.current = 0
     nextFileIndexRef.current = 0
     chunksRef.current = new Map()
 
@@ -96,19 +102,27 @@ export function useReceiver(targetPeerId: string | null) {
 
           case MessageType.Chunk: {
             const { fileName, bytes, final } = message
-            const chunk = bytes as Blob
+            const chunk = bytes instanceof Blob ? bytes : new Blob([bytes as BlobPart])
+            const chunkSize = Number.isFinite(chunk.size) ? chunk.size : 0
 
             if (!chunksRef.current.has(fileName)) {
               chunksRef.current.set(fileName, [])
             }
             chunksRef.current.get(fileName)!.push(chunk)
 
-            downloadedRef.current += chunk.size
+            downloadedRef.current += chunkSize
+
+            const now = Date.now()
+            const dt = lastChunkTimeRef.current ? (now - lastChunkTimeRef.current) / 1000 : 0
+            const speed = dt > 0 ? (downloadedRef.current - lastChunkBytesRef.current) / dt : 0
+            lastChunkTimeRef.current = now
+            lastChunkBytesRef.current = downloadedRef.current
 
             setState((s) => ({
               ...s,
               status: 'downloading',
               downloadedBytes: downloadedRef.current,
+              speed,
               progress: totalBytesRef.current
                 ? downloadedRef.current / totalBytesRef.current
                 : 0,

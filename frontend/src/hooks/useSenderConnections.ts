@@ -13,6 +13,7 @@ export interface SenderConnection {
   status: 'pending' | 'ready' | 'uploading' | 'done' | 'closed'
   progress: number
   currentFile: string | null
+  speed: number
 }
 
 export function useSenderConnections(
@@ -32,7 +33,7 @@ export function useSenderConnections(
     const addConn = (peerId: string) => {
       setConnections((prev) => [
         ...prev,
-        { peerId, status: 'pending', progress: 0, currentFile: null },
+        { peerId, status: 'pending', progress: 0, currentFile: null, speed: 0 },
       ])
     }
 
@@ -47,6 +48,7 @@ export function useSenderConnections(
       addConn(peerId)
 
       let sendChunkTimeout: ReturnType<typeof setTimeout> | null = null
+      let lastChunkTime = 0
 
       const onData = (data: unknown) => {
         try {
@@ -101,11 +103,18 @@ export function useSenderConnections(
                   })
 
                   const progress = offset / file.size
+                  const now = Date.now()
+                  const chunkSize = end - offset
+                  const dt = lastChunkTime ? (now - lastChunkTime) / 1000 : 0
+                  const speed = dt > 0 ? chunkSize / dt : 0
+                  lastChunkTime = now
+
                   updateConn(peerId, (c) => ({
                     ...c,
                     status: 'uploading',
                     currentFile: fileName,
                     progress: final ? 1 : progress,
+                    speed,
                   }))
 
                   offset = end
