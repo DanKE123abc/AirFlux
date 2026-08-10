@@ -238,7 +238,7 @@ app.get('/api/pickup/:code/download', async (c) => {
 
   const record = await c.env.DB.prepare(
     'SELECT * FROM pickup_codes WHERE code = ? AND expires_at > datetime(\'now\')'
-  ).bind(code).first<{ r2_key: string | null; mode: string; file_name: string | null; file_size: number | null; file_type: string | null; files: string | null }>()
+  ).bind(code).first<{ mode: string; file_name: string | null; file_size: number | null; file_type: string | null; files: string | null }>()
 
   if (!record) {
     return c.json({ error: 'code not found or expired' }, 404)
@@ -256,18 +256,6 @@ app.get('/api/pickup/:code/download', async (c) => {
         return { name: f.name, size: f.size, type: f.type, downloadUrl }
       }))
       return c.json({ files: items })
-    }
-
-    if (record.r2_key) {
-      const downloadUrl = await onemanagerFileUrl(c.env, record.r2_key)
-      return c.json({
-        files: [{
-          name: record.file_name || 'download',
-          size: record.file_size || 0,
-          type: record.file_type || 'application/octet-stream',
-          downloadUrl,
-        }],
-      })
     }
 
     return c.json({ error: 'file not uploaded yet' }, 404)

@@ -8,7 +8,6 @@ CREATE TABLE IF NOT EXISTS pickup_codes (
   file_name TEXT,
   file_size INTEGER,
   file_type TEXT,
-  r2_key TEXT,
   files TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   expires_at TEXT NOT NULL

@@ -33,8 +33,8 @@ Worker cron runs hourly for cleanup (configured in `wrangler.toml` `[triggers]`)
 ## Key Architecture
 
 - **P2P mode**: WebRTC peer-to-peer transfer via PeerJS. Sender closes tab → code auto-expires via `navigator.sendBeacon`.
-- **Timed mode**: Files uploaded to cloud storage (R2). Expires after selected duration.
-- **Text mode**: Stores clipboard text content in D1. 1-hour TTL.
+- **Timed mode**: Files uploaded to cloud storage (OneManager). Expires after selected duration.
+- **Text mode**: Stores clipboard text content in D1. TTL follows the user-selected duration (p2p/1h–72h); text is stored in the `text_content` column regardless of mode.
 - All modes use a 6-digit numeric pickup code stored in D1 `pickup_codes` table.
 - Frontend dev proxy at `http://127.0.0.1:8787` for API calls.
 
