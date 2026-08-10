@@ -22,7 +22,6 @@ function getExpiresAt(mode: string): string {
   const now = new Date()
   switch (mode) {
     case 'p2p': now.setHours(now.getHours() + 1); break
-    case 'text': now.setHours(now.getHours() + 1); break
     case '1h': now.setHours(now.getHours() + 1); break
     case '5h': now.setHours(now.getHours() + 5); break
     case '12h': now.setHours(now.getHours() + 12); break
@@ -31,26 +30,6 @@ function getExpiresAt(mode: string): string {
     default: now.setHours(now.getHours() + 1)
   }
   return now.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '')
-}
-
-async function onemanagerUpload(env: Bindings, file: File, path: string = '/AirFlux'): Promise<{ id: string; name: string; url: string }> {
-  const formData = new FormData()
-  formData.append('file', file)
-  const res = await fetch(`${env.ONEMANAGER_URL}/upload?path=${encodeURIComponent(path)}&disktag=${env.ONEMANAGER_DISK}`, {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${env.ONEMANAGER_KEY}` },
-    body: formData,
-  })
-  const contentType = res.headers.get('content-type') || ''
-  if (!contentType.includes('application/json')) {
-    const text = await res.text()
-    throw new Error(`OneManager returned non-JSON: ${text.slice(0, 200)}`)
-  }
-  const json: any = await res.json()
-  if (json.code !== 201) {
-    throw new Error(`OneManager upload failed: ${json.message || json.code}`)
-  }
-  return { id: json.data.id, name: json.data.name, url: json.data.url }
 }
 
 async function onemanagerDelete(env: Bindings, filePath: string): Promise<void> {
@@ -77,17 +56,22 @@ async function onemanagerMkdir(env: Bindings, parentPath: string, name: string):
   }
 }
 
-function getTTLSeconds(mode: string): number {
-  switch (mode) {
-    case 'p2p': return 3600
-    case 'text': return 3600
-    case '1h': return 3600
-    case '5h': return 18000
-    case '12h': return 43200
-    case '24h': return 86400
-    case '72h': return 259200
-    default: return 3600
+// Resolve a temporary download URL for a file path by calling OneManager
+// server-side. The API key is sent in the Authorization header and never
+// exposed to the client in the returned URL.
+async function onemanagerFileUrl(env: Bindings, path: string): Promise<string> {
+  const res = await fetch(
+    `${env.ONEMANAGER_URL}/file?path=${encodeURIComponent(path)}&disktag=${env.ONEMANAGER_DISK}`,
+    { headers: { 'Authorization': `Bearer ${env.ONEMANAGER_KEY}` } },
+  )
+  if (!res.ok) {
+    throw new Error(`Failed to resolve download URL: ${res.status}`)
   }
+  const json: any = await res.json()
+  if (!json.data?.downloadUrl) {
+    throw new Error('No download URL returned')
+  }
+  return json.data.downloadUrl
 }
 
 // Create a pickup code
@@ -102,26 +86,29 @@ app.post('/api/pickup', async (c) => {
     return c.json({ error: 'invalid mode' }, 400)
   }
 
-  // Generate unique code
-  let code = generatePickupCode()
-  let attempts = 0
-  while (attempts < 10) {
-    const existing = await c.env.DB.prepare('SELECT id FROM pickup_codes WHERE code = ?').bind(code).first()
-    if (!existing) break
-    code = generatePickupCode()
-    attempts++
-  }
-
-  if (attempts >= 10) {
-    return c.json({ error: 'failed to generate unique code' }, 500)
-  }
-
   const expiresAt = getExpiresAt(mode)
 
-  await c.env.DB.prepare(
+  // Generate a unique code by attempting the INSERT directly and retrying
+  // on UNIQUE constraint violations. This avoids the SELECT-then-INSERT race.
+  let code = ''
+  const insertStmt = c.env.DB.prepare(
     `INSERT INTO pickup_codes (code, mode, peer_id, note, text_content, file_name, file_size, file_type, expires_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(code, mode, peerId || null, note || null, textContent || null, fileName || null, fileSize || null, fileType || null, expiresAt).run()
+  )
+  for (let attempt = 0; attempt < 10; attempt++) {
+    code = generatePickupCode()
+    try {
+      await insertStmt
+        .bind(code, mode, peerId || null, note || null, textContent || null, fileName || null, fileSize || null, fileType || null, expiresAt)
+        .run()
+      break
+    } catch (err: any) {
+      const msg = err?.message || ''
+      const isConflict = msg.includes('UNIQUE constraint failed') || msg.includes('UNIQUE_CONSTRAINT')
+      if (!isConflict) throw err
+      if (attempt === 9) return c.json({ error: 'failed to generate unique code' }, 500)
+    }
+  }
 
   if (mode !== 'p2p' && !textContent) {
     await onemanagerMkdir(c.env, '/', code)
@@ -261,47 +248,51 @@ app.get('/api/pickup/:code/download', async (c) => {
     return c.json({ error: 'invalid mode for download' }, 400)
   }
 
-  if (record.files) {
-    const files: { name: string; storageName: string; size: number; type: string }[] = JSON.parse(record.files)
-    const items = files.map((f) => ({
-      name: f.name,
-      size: f.size,
-      type: f.type,
-      downloadUrl: `${c.env.ONEMANAGER_URL}/download?path=${encodeURIComponent(`/${code}/${f.name}`)}&disktag=${c.env.ONEMANAGER_DISK}&api_key=${c.env.ONEMANAGER_KEY}`,
-    }))
-    return c.json({ files: items })
-  }
+  try {
+    if (record.files) {
+      const files: { name: string; storageName: string; size: number; type: string }[] = JSON.parse(record.files)
+      const items = await Promise.all(files.map(async (f) => {
+        const downloadUrl = await onemanagerFileUrl(c.env, `/${code}/${f.name}`)
+        return { name: f.name, size: f.size, type: f.type, downloadUrl }
+      }))
+      return c.json({ files: items })
+    }
 
-  if (record.r2_key) {
-    const downloadUrl = `${c.env.ONEMANAGER_URL}/download?path=${encodeURIComponent(record.r2_key)}&disktag=${c.env.ONEMANAGER_DISK}&api_key=${c.env.ONEMANAGER_KEY}`
-    return c.json({
-      files: [{
-        name: record.file_name || 'download',
-        size: record.file_size || 0,
-        type: record.file_type || 'application/octet-stream',
-        downloadUrl,
-      }],
-    })
-  }
+    if (record.r2_key) {
+      const downloadUrl = await onemanagerFileUrl(c.env, record.r2_key)
+      return c.json({
+        files: [{
+          name: record.file_name || 'download',
+          size: record.file_size || 0,
+          type: record.file_type || 'application/octet-stream',
+          downloadUrl,
+        }],
+      })
+    }
 
-  return c.json({ error: 'file not uploaded yet' }, 404)
+    return c.json({ error: 'file not uploaded yet' }, 404)
+  } catch (err: any) {
+    return c.json({ error: err.message || 'failed to resolve download URL' }, 500)
+  }
 })
+
+// Remove a pickup code: delete the OneManager folder (best-effort) and the DB row
+async function deletePickupCode(env: Bindings, code: string): Promise<void> {
+  try { await onemanagerDelete(env, `/${code}`) } catch {}
+  await env.DB.prepare('DELETE FROM pickup_codes WHERE code = ?').bind(code).run()
+}
 
 // Delete a pickup code (manual cancel)
 app.delete('/api/pickup/:code', async (c) => {
   const { code } = c.req.param()
-
-  try { await onemanagerDelete(c.env, `/${code}`) } catch {}
-
-  await c.env.DB.prepare('DELETE FROM pickup_codes WHERE code = ?').bind(code).run()
+  await deletePickupCode(c.env, code)
   return c.json({ success: true })
 })
 
 // Expire a pickup code (used by sendBeacon on page unload — only POST)
 app.post('/api/pickup/:code/expire', async (c) => {
   const { code } = c.req.param()
-  try { await onemanagerDelete(c.env, `/${code}`) } catch {}
-  await c.env.DB.prepare('DELETE FROM pickup_codes WHERE code = ?').bind(code).run()
+  await deletePickupCode(c.env, code)
   return c.json({ success: true })
 })
 

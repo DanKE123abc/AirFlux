@@ -146,17 +146,13 @@ export default function HomePage({ onSend, onSendWithFiles, onSendWithText, onRe
       {/* Logo */}
       <div className="text-center animate-slide-down">
         <div className="text-6xl mb-4">
-          <svg width="64" height="64" viewBox="0 0 100 100" className="mx-auto text-blue-500">
-            <polygon points="50,5 95,95 5,95" fill="currentColor" opacity="0.2" />
-            <polygon points="50,20 80,85 20,85" fill="currentColor" opacity="0.4" />
-            <polygon points="50,40 65,75 35,75" fill="currentColor" />
-          </svg>
+          <img src="/favicon.svg" alt="AirFlux logo" width="64" height="64" className="mx-auto" />
         </div>
         <h1 className="text-4xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">
           AirFlux
         </h1>
         <p className="text-slate-500 dark:text-slate-400 mt-2 text-lg">
-          极速文件快传
+          文件快传
         </p>
       </div>
 
@@ -174,7 +170,7 @@ export default function HomePage({ onSend, onSendWithFiles, onSendWithText, onRe
         >
           <span className="flex items-center justify-center gap-3">
             <ArrowUpFromLine className="w-6 h-6 transition-transform duration-200 group-hover:-translate-y-0.5" />
-            发送文件
+            发送
           </span>
         </button>
 
@@ -184,7 +180,7 @@ export default function HomePage({ onSend, onSendWithFiles, onSendWithText, onRe
         >
           <span className="flex items-center justify-center gap-3">
             <ArrowDownFromLine className="w-6 h-6 transition-transform duration-200 group-hover:translate-y-0.5" />
-            接收文件
+            接收
           </span>
         </button>
       </div>
