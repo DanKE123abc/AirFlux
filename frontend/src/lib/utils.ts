@@ -14,14 +14,9 @@ export function formatSpeed(bytesPerSec: number): string {
   return `${bytesPerSec.toFixed(0)} B/s`
 }
 
-export function formatTime(iso: string): string {
-  return new Date(iso).toLocaleString('zh-CN')
-}
-
 export function getExpiryLabel(mode: string): string {
   switch (mode) {
     case 'p2p': return '面对面快传'
-    case 'text': return '纯文本'
     case '1h': return '1小时'
     case '5h': return '5小时'
     case '12h': return '12小时'

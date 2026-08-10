@@ -7,11 +7,13 @@ import {
   WifiIcon, CopyIcon, CheckIcon, LoaderIcon,
 } from '../components/Icons'
 import WebRTCProvider, { useWebRTCPeer } from '../components/WebRTCProvider'
+import CodeCard from '../components/CodeCard'
 import { useSenderChannel } from '../hooks/useSenderChannel'
 import { useSenderConnections, SenderConnection } from '../hooks/useSenderConnections'
 import { createPickupCode, uploadFileForPickup, savePickupFiles } from '../lib/api'
+import { readDropItems } from '../lib/files'
 import { TransferMode } from '../types'
-import { formatSpeed } from '../lib/utils'
+import { formatSpeed, getExpiryLabel } from '../lib/utils'
 
 function ShareLinkSection({ code }: { code: string }) {
   const [copiedLink, setCopiedLink] = useState(false)
@@ -94,7 +96,6 @@ function TextShareView({
   onBack: () => void
 }) {
   const [code, setCode] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -109,14 +110,6 @@ function TextShareView({
       setError(err.message)
     })
   }, [code, textContent, note, mode])
-
-  const handleCopy = useCallback(() => {
-    if (code) {
-      navigator.clipboard.writeText(code)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-  }, [code])
 
   return (
     <div className="flex flex-col items-center gap-8 w-full max-w-md">
@@ -138,23 +131,10 @@ function TextShareView({
               <CheckIcon className="w-8 h-8 text-green-500" />
             </div>
             <h2 className="text-2xl font-bold text-slate-800">笔记已保存</h2>
-            <p className="text-slate-500 mt-1">分享取件码给对方，{mode === '1h' ? '1小时' : mode === '5h' ? '5小时' : mode === '12h' ? '12小时' : mode === '24h' ? '24小时' : '72小时'}后自动失效</p>
+            <p className="text-slate-500 mt-1">分享取件码给对方，{getExpiryLabel(mode)}后自动失效</p>
           </div>
 
-          <div className="w-full text-center animate-slide-up delay-75">
-            <div
-              onClick={handleCopy}
-              className="inline-flex items-center gap-3 px-8 py-4 bg-white rounded-2xl border-2 border-dashed border-blue-400 cursor-pointer hover:bg-blue-50 transition-all duration-200 group active:scale-[0.98]"
-            >
-              <span className="text-5xl font-mono font-bold tracking-[0.2em] text-blue-600 select-all">{code}</span>
-              {copied ? (
-                <CheckIcon className="w-6 h-6 text-green-500 shrink-0" />
-              ) : (
-                <CopyIcon className="w-6 h-6 text-slate-400 group-hover:text-blue-500 shrink-0" />
-              )}
-            </div>
-            <p className="text-xs text-slate-400 mt-2">点击复制取件码</p>
-          </div>
+          <CodeCard code={code} />
 
           <div className="animate-slide-up delay-150"><ShareLinkSection code={code} /></div>
 
@@ -237,7 +217,6 @@ function TextP2PView({
 }) {
   const [peerId, setPeerId] = useState<string | null>(null)
   const [code, setCode] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
 
   const peerReady = useCallback((id: string) => {
     setPeerId(id)
@@ -263,8 +242,6 @@ function TextP2PView({
         onBack={onBack}
         code={code}
         setCode={setCode}
-        copied={copied}
-        setCopied={setCopied}
       />
     </WebRTCProvider>
   )
@@ -277,8 +254,6 @@ function TextP2PInner({
   onBack,
   code,
   setCode,
-  copied,
-  setCopied,
 }: {
   peerId: string
   textContent: string
@@ -286,8 +261,6 @@ function TextP2PInner({
   onBack: () => void
   code: string | null
   setCode: (c: string) => void
-  copied: boolean
-  setCopied: (c: boolean) => void
 }) {
   const { peer } = useWebRTCPeer()
   const connections = useSenderConnections(peer, [], textContent)
@@ -308,14 +281,6 @@ function TextP2PInner({
       setCode(channel.pickupCode)
     }
   }, [channel.pickupCode, code, setCode])
-
-  const handleCopy = useCallback(() => {
-    if (code) {
-      navigator.clipboard.writeText(code)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-  }, [code, setCopied])
 
   const activeConn = connections.find(
     (c: SenderConnection) => c.status === 'ready' || c.status === 'done',
@@ -346,22 +311,7 @@ function TextP2PInner({
             <p className="text-slate-500 mt-1">分享取件码给对方，关闭页面即失效</p>
           </div>
 
-          <div className="w-full text-center animate-slide-up delay-75">
-            <div
-              onClick={handleCopy}
-              className="inline-flex items-center gap-3 px-8 py-4 bg-white rounded-2xl border-2 border-dashed border-blue-400 cursor-pointer hover:bg-blue-50 transition-all duration-200 group active:scale-[0.98]"
-            >
-              <span className="text-5xl font-mono font-bold tracking-[0.2em] text-blue-600 select-all">
-                {code}
-              </span>
-              {copied ? (
-                <CheckIcon className="w-6 h-6 text-green-500 shrink-0" />
-              ) : (
-                <CopyIcon className="w-6 h-6 text-slate-400 group-hover:text-blue-500 shrink-0" />
-              )}
-            </div>
-            <p className="text-xs text-slate-400 mt-2">点击复制取件码</p>
-          </div>
+          <CodeCard code={code} />
 
           <div className="animate-slide-up delay-150"><ShareLinkSection code={code} /></div>
 
@@ -445,7 +395,6 @@ function SharingView({
 }) {
   const [peerId, setPeerId] = useState<string | null>(null)
   const [code, setCode] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
 
   // WebRTC peer is ready inside this provider
   const peerReady = useCallback((id: string) => {
@@ -473,8 +422,6 @@ function SharingView({
         onBack={onBack}
         code={code}
         setCode={setCode}
-        copied={copied}
-        setCopied={setCopied}
       />
     </WebRTCProvider>
   )
@@ -488,8 +435,6 @@ function SharingInner({
   onBack,
   code,
   setCode,
-  copied,
-  setCopied,
 }: {
   peerId: string
   files: File[]
@@ -498,8 +443,6 @@ function SharingInner({
   onBack: () => void
   code: string | null
   setCode: (c: string) => void
-  copied: boolean
-  setCopied: (c: boolean) => void
 }) {
   const { peer } = useWebRTCPeer()
   const connections = useSenderConnections(peer, files)
@@ -524,14 +467,6 @@ function SharingInner({
       setCode(channel.pickupCode)
     }
   }, [channel.pickupCode, code, setCode])
-
-  const handleCopy = useCallback(() => {
-    if (code) {
-      navigator.clipboard.writeText(code)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-  }, [code, setCopied])
 
   const activeConn = connections.find(
     (c: SenderConnection) => c.status === 'uploading' || c.status === 'ready',
@@ -567,22 +502,7 @@ function SharingInner({
           </div>
 
           {/* Pickup Code */}
-          <div className="w-full text-center animate-slide-up delay-75">
-            <div
-              onClick={handleCopy}
-              className="inline-flex items-center gap-3 px-8 py-4 bg-white rounded-2xl border-2 border-dashed border-blue-400 cursor-pointer hover:bg-blue-50 transition-all duration-200 group active:scale-[0.98]"
-            >
-              <span className="text-5xl font-mono font-bold tracking-[0.2em] text-blue-600 select-all">
-                {code}
-              </span>
-              {copied ? (
-                <CheckIcon className="w-6 h-6 text-green-500 shrink-0" />
-              ) : (
-                <CopyIcon className="w-6 h-6 text-slate-400 group-hover:text-blue-500 shrink-0" />
-              )}
-            </div>
-            <p className="text-xs text-slate-400 mt-2">点击复制取件码</p>
-          </div>
+          <CodeCard code={code} />
 
           <div className="animate-slide-up delay-150"><ShareLinkSection code={code} /></div>
 
@@ -659,7 +579,6 @@ function TimedShareView({
   onBack: () => void
 }) {
   const [code, setCode] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [speed, setSpeed] = useState(0)
@@ -708,14 +627,6 @@ function TimedShareView({
     doUpload()
   }, [code, uploading, files, mode, note])
 
-  const handleCopy = useCallback(() => {
-    if (code) {
-      navigator.clipboard.writeText(code)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-  }, [code])
-
   return (
     <div className="flex flex-col items-center gap-8 w-full max-w-md">
       {error && (
@@ -751,26 +662,11 @@ function TimedShareView({
             </div>
             <h2 className="text-2xl font-bold text-slate-800">文件已上传</h2>
             <p className="text-slate-500 mt-1">
-              分享取件码给对方，{mode}后自动失效
+              分享取件码给对方，{getExpiryLabel(mode)}后自动失效
             </p>
           </div>
 
-          <div className="w-full text-center animate-slide-up delay-75">
-            <div
-              onClick={handleCopy}
-              className="inline-flex items-center gap-3 px-8 py-4 bg-white rounded-2xl border-2 border-dashed border-blue-400 cursor-pointer hover:bg-blue-50 transition-all duration-200 group active:scale-[0.98]"
-            >
-              <span className="text-5xl font-mono font-bold tracking-[0.2em] text-blue-600 select-all">
-                {code}
-              </span>
-              {copied ? (
-                <CheckIcon className="w-6 h-6 text-green-500 shrink-0" />
-              ) : (
-                <CopyIcon className="w-6 h-6 text-slate-400 group-hover:text-blue-500 shrink-0" />
-              )}
-            </div>
-            <p className="text-xs text-slate-400 mt-2">点击复制取件码</p>
-          </div>
+          <CodeCard code={code} />
 
           <div className="animate-slide-up delay-150"><ShareLinkSection code={code} /></div>
 
@@ -819,35 +715,6 @@ export default function SendView({ onBack, preloadedFiles, preloadedText }: Prop
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
 
-  const readEntry = useCallback((entry: FileSystemEntry): Promise<File[]> => {
-    if (entry.isFile) {
-      return new Promise((resolve) => {
-        (entry as FileSystemFileEntry).file((file) => resolve([file]))
-      })
-    }
-    if (entry.isDirectory) {
-      const dirReader = (entry as FileSystemDirectoryEntry).createReader()
-      return new Promise((resolve) => {
-        const allFiles: File[] = []
-        const readBatch = () => {
-          dirReader.readEntries(async (entries) => {
-            if (entries.length === 0) {
-              resolve(allFiles)
-            } else {
-              for (const e of entries) {
-                const files = await readEntry(e)
-                allFiles.push(...files)
-              }
-              readBatch()
-            }
-          })
-        }
-        readBatch()
-      })
-    }
-    return Promise.resolve([])
-  }, [])
-
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const newFiles = Array.from(e.target.files)
@@ -864,27 +731,7 @@ export default function SendView({ onBack, preloadedFiles, preloadedText }: Prop
 
     const items = e.dataTransfer.items
     if (items && items.length > 0) {
-      const allFiles: File[] = []
-      const entries: FileSystemEntry[] = []
-
-      for (let i = 0; i < items.length; i++) {
-        const entry = items[i].webkitGetAsEntry?.()
-        if (entry) entries.push(entry)
-      }
-
-      if (entries.length > 0) {
-        for (const entry of entries) {
-          const files = await readEntry(entry)
-          allFiles.push(...files)
-        }
-      }
-
-      if (allFiles.length === 0) {
-        const fileList = e.dataTransfer.files
-        for (let i = 0; i < fileList.length; i++) {
-          allFiles.push(fileList[i])
-        }
-      }
+      const allFiles = await readDropItems(items, e.dataTransfer.files)
 
       if (allFiles.length > 0) {
         setFiles(prev => [...prev, ...allFiles])
@@ -892,7 +739,7 @@ export default function SendView({ onBack, preloadedFiles, preloadedText }: Prop
         if (step === 'choose-type') setStep('choose-files')
       }
     }
-  }, [step, readEntry])
+  }, [step])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()

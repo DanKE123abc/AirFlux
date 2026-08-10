@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPickupCode, deletePickupCode } from '../lib/api'
 import { TransferMode } from '../types'
 
@@ -26,6 +26,7 @@ export function useSenderChannel(
     expiresAt: null,
   })
   const createdCode = useRef<string | null>(null)
+  const creating = useRef(false)
 
   // Clean up on unmount
   useEffect(() => {
@@ -48,12 +49,15 @@ export function useSenderChannel(
     return () => window.removeEventListener('beforeunload', handleUnload)
   }, [state.pickupCode])
 
-  const createChannel = async () => {
+  const createChannel = useCallback(async () => {
+    // Guard against re-entrancy (e.g. StrictMode double-effects in dev)
+    if (creating.current) return
     if (!peerId) {
       setState((s) => ({ ...s, error: 'Peer not ready' }))
       return
     }
 
+    creating.current = true
     setState((s) => ({ ...s, isLoading: true, error: null }))
 
     try {
@@ -79,8 +83,13 @@ export function useSenderChannel(
         isLoading: false,
         error: err.message,
       }))
+    } finally {
+      creating.current = false
     }
-  }
+  }, [peerId, mode, options?.note, options?.fileName, options?.fileSize, options?.textContent])
 
-  return { ...state, createChannel }
+  return useMemo(
+    () => ({ ...state, createChannel }),
+    [state, createChannel],
+  )
 }

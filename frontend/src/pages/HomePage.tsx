@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { ArrowUpFromLine, ArrowDownFromLine } from '../components/Icons'
+import { readDropItems } from '../lib/files'
 
 interface Props {
   onSend: () => void
@@ -10,48 +11,6 @@ interface Props {
 
 export default function HomePage({ onSend, onSendWithFiles, onSendWithText, onReceive }: Props) {
   const [dragging, setDragging] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
-
-  const showToast = useCallback((msg: string) => {
-    setToast(msg)
-    setTimeout(() => setToast(null), 2000)
-  }, [])
-
-  const readEntry = useCallback((entry: FileSystemEntry): Promise<File[]> => {
-    if (entry.isFile) {
-      return new Promise((resolve) => {
-        (entry as FileSystemFileEntry).file((file) => resolve([file]))
-      })
-    }
-    if (entry.isDirectory) {
-      const dirReader = (entry as FileSystemDirectoryEntry).createReader()
-      return new Promise((resolve) => {
-        const allFiles: File[] = []
-        const readBatch = () => {
-          dirReader.readEntries(async (entries) => {
-            if (entries.length === 0) {
-              resolve(allFiles)
-            } else {
-              for (const e of entries) {
-                const files = await readEntry(e)
-                allFiles.push(...files)
-              }
-              readBatch()
-            }
-          })
-        }
-        readBatch()
-      })
-    }
-    return Promise.resolve([])
-  }, [])
-
-  const handleFiles = useCallback((fileList: FileList) => {
-    const files = Array.from(fileList)
-    if (files.length > 0) {
-      onSendWithFiles(files)
-    }
-  }, [onSendWithFiles])
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault()
@@ -60,27 +19,7 @@ export default function HomePage({ onSend, onSendWithFiles, onSendWithText, onRe
 
     const items = e.dataTransfer.items
     if (items && items.length > 0) {
-      const allFiles: File[] = []
-      const entries: FileSystemEntry[] = []
-
-      for (let i = 0; i < items.length; i++) {
-        const entry = items[i].webkitGetAsEntry?.()
-        if (entry) entries.push(entry)
-      }
-
-      if (entries.length > 0) {
-        for (const entry of entries) {
-          const files = await readEntry(entry)
-          allFiles.push(...files)
-        }
-      }
-
-      if (allFiles.length === 0) {
-        const fileList = e.dataTransfer.files
-        for (let i = 0; i < fileList.length; i++) {
-          allFiles.push(fileList[i])
-        }
-      }
+      const allFiles = await readDropItems(items, e.dataTransfer.files)
 
       if (allFiles.length > 0) {
         onSendWithFiles(allFiles)
@@ -94,7 +33,7 @@ export default function HomePage({ onSend, onSendWithFiles, onSendWithText, onRe
         onSendWithText(text)
       }
     }
-  }, [readEntry, onSendWithFiles, onSendWithText])
+  }, [onSendWithFiles, onSendWithText])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -191,12 +130,6 @@ export default function HomePage({ onSend, onSendWithFiles, onSendWithText, onRe
       <p className="text-xs text-slate-400 text-center -mt-4 animate-slide-up delay-300">
         发送、接收文件即代表您同意我们的 隐私政策 和 用户协议
       </p>
-
-      {toast && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 px-5 py-3 bg-slate-800 text-white text-sm rounded-xl shadow-lg z-50 animate-fade-in">
-          {toast}
-        </div>
-      )}
     </div>
   )
 }

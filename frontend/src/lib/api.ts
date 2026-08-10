@@ -115,8 +115,3 @@ export async function getDownloadUrls(code: string) {
   }
   return res.json()
 }
-
-export async function getICEConfig() {
-  const res = await fetch(`${API_BASE}/ice`)
-  return res.json()
-}

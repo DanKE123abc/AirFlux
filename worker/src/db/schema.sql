@@ -15,3 +15,11 @@ CREATE TABLE IF NOT EXISTS pickup_codes (
 
 CREATE INDEX IF NOT EXISTS idx_pickup_codes_code ON pickup_codes(code);
 CREATE INDEX IF NOT EXISTS idx_pickup_codes_expires_at ON pickup_codes(expires_at);
+
+CREATE TABLE IF NOT EXISTS rate_limits (
+  bucket_key TEXT PRIMARY KEY,
+  window_start INTEGER NOT NULL,
+  count INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_rate_limits_window ON rate_limits(window_start);

@@ -1,30 +1,15 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import Vditor from 'vditor'
-import 'vditor/dist/index.css'
 import { ArrowLeft, ArrowDownFromLine, LoaderIcon, FileIcon, CheckIcon, WifiIcon } from '../components/Icons'
+import MarkdownPreview from '../components/MarkdownPreview'
+import FullscreenMarkdown from '../components/FullscreenMarkdown'
 import WebRTCProvider from '../components/WebRTCProvider'
 import { useReceiver } from '../hooks/useReceiver'
 import { lookupPickupCode, getDownloadUrls } from '../lib/api'
-import { getExpiryLabel, formatFileSize, formatSpeed } from '../lib/utils'
+import { formatFileSize, formatSpeed } from '../lib/utils'
 
 interface Props { onBack: () => void; initialCode?: string | null }
 
 type Step = 'enter-code' | 'loading' | 'receiving'
-
-function MarkdownPreview({ content }: { content: string }) {
-  const previewRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (previewRef.current && content) {
-      Vditor.preview(previewRef.current, content, {
-        mode: 'light',
-        lang: 'zh_CN',
-      })
-    }
-  }, [content])
-
-  return <div ref={previewRef} className="vditor-reset text-sm" />
-}
 
 function TimedDownloadView({
   code,
@@ -171,21 +156,7 @@ function DownloadView({ peerId, note, onBack }: { peerId: string; note: string |
         </button>
 
         {fullscreen && (
-          <div className="fixed inset-0 z-50 flex flex-col bg-white animate-overlay-in">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 shrink-0 animate-slide-down">
-              <h3 className="text-lg font-semibold text-slate-800">笔记内容</h3>
-              <button onClick={() => setFullscreen(false)} className="p-2 rounded-lg hover:bg-slate-100 transition-colors text-slate-500 hover:text-slate-700">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="max-w-3xl mx-auto">
-                <MarkdownPreview content={state.noteContent!} />
-              </div>
-            </div>
-          </div>
+          <FullscreenMarkdown content={state.noteContent!} onClose={() => setFullscreen(false)} />
         )}
       </div>
     )
@@ -424,21 +395,7 @@ export default function ReceiveView({ onBack, initialCode }: Props) {
         </button>
 
         {fullscreen && (
-          <div className="fixed inset-0 z-50 flex flex-col bg-white animate-overlay-in">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 shrink-0 animate-slide-down">
-              <h3 className="text-lg font-semibold text-slate-800">笔记内容</h3>
-              <button onClick={() => setFullscreen(false)} className="p-2 rounded-lg hover:bg-slate-100 transition-colors text-slate-500 hover:text-slate-700">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="max-w-3xl mx-auto">
-                <MarkdownPreview content={code} />
-              </div>
-            </div>
-          </div>
+          <FullscreenMarkdown content={code} onClose={() => setFullscreen(false)} />
         )}
       </div>
     )

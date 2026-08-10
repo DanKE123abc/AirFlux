@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useWebRTCPeer } from '../components/WebRTCProvider'
-import { ChunkMessage, decodeMessage, Message, MessageType } from './messages'
+import { decodeMessage, Message, MessageType } from './messages'
 import { DataConnection } from 'peerjs'
 
 interface ReceiverState {
@@ -32,6 +32,7 @@ export function useReceiver(targetPeerId: string | null) {
   const downloadedRef = useRef(0)
   const lastChunkTimeRef = useRef(0)
   const lastChunkBytesRef = useRef(0)
+  const lastProgressFlushRef = useRef(0)
   const filesRef = useRef<Array<{ fileName: string; size: number; type: string }> | null>(null)
   const nextFileIndexRef = useRef(0)
 
@@ -118,15 +119,19 @@ export function useReceiver(targetPeerId: string | null) {
             lastChunkTimeRef.current = now
             lastChunkBytesRef.current = downloadedRef.current
 
-            setState((s) => ({
-              ...s,
-              status: 'downloading',
-              downloadedBytes: downloadedRef.current,
-              speed,
-              progress: totalBytesRef.current
-                ? downloadedRef.current / totalBytesRef.current
-                : 0,
-            }))
+            // Throttle progress re-renders to ~10/s (chunks arrive much faster)
+            if (final || now - lastProgressFlushRef.current >= 100) {
+              lastProgressFlushRef.current = now
+              setState((s) => ({
+                ...s,
+                status: 'downloading',
+                downloadedBytes: downloadedRef.current,
+                speed,
+                progress: totalBytesRef.current
+                  ? downloadedRef.current / totalBytesRef.current
+                  : 0,
+              }))
+            }
 
             // Send ack
             conn.send({
@@ -137,6 +142,17 @@ export function useReceiver(targetPeerId: string | null) {
             } satisfies Message)
 
             if (final) {
+              // Force a final progress flush so the bar reaches 100% accurately
+              setState((s) => ({
+                ...s,
+                status: 'downloading',
+                downloadedBytes: downloadedRef.current,
+                speed,
+                progress: totalBytesRef.current
+                  ? downloadedRef.current / totalBytesRef.current
+                  : 0,
+              }))
+
               // Assemble and download the complete file
               const allChunks = chunksRef.current.get(fileName)!
               const blob = new Blob(allChunks)

@@ -1,5 +1,4 @@
-import { Hono } from 'hono'
-import { cors } from 'hono/cors'
+import { Hono, Context } from 'hono'
 import type { ScheduledEvent } from '@cloudflare/workers-types'
 
 type Bindings = {
@@ -7,15 +6,35 @@ type Bindings = {
   ONEMANAGER_URL: string
   ONEMANAGER_KEY: string
   ONEMANAGER_DISK: string
+  // Optional rate-limit tuning
+  RATE_LIMIT_MAX?: string
+  RATE_LIMIT_WINDOW?: string
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
 
-app.use('/*', cors())
-
 // Generate a random 6-digit code
 function generatePickupCode(): string {
   return Math.floor(100000 + Math.random() * 900000).toString()
+}
+
+// Fixed-window rate limit backed by D1. Keyed by client IP so a single
+// attacker can't spam-create pickup codes and fill up the database/storage.
+async function isRateLimited(env: Bindings, c: Context): Promise<boolean> {
+  const max = parseInt(env.RATE_LIMIT_MAX || '20', 10)
+  const windowSec = parseInt(env.RATE_LIMIT_WINDOW || '3600', 10)
+  const ip = c.req.header('CF-Connecting-IP') || 'unknown'
+  const windowStart = Math.floor(Date.now() / 1000 / windowSec) * windowSec
+  const bucketKey = `${ip}:${windowStart}`
+
+  const row = await env.DB.prepare(
+    `INSERT INTO rate_limits (bucket_key, window_start, count)
+     VALUES (?, ?, 1)
+     ON CONFLICT(bucket_key) DO UPDATE SET count = count + 1
+     RETURNING count`
+  ).bind(bucketKey, windowStart).first<{ count: number }>()
+
+  return (row?.count ?? 0) > max
 }
 
 function getExpiresAt(mode: string): string {
@@ -84,6 +103,10 @@ app.post('/api/pickup', async (c) => {
 
   if (!['p2p', '1h', '5h', '12h', '24h', '72h'].includes(mode)) {
     return c.json({ error: 'invalid mode' }, 400)
+  }
+
+  if (await isRateLimited(c.env, c)) {
+    return c.json({ error: 'too many requests, please try again later' }, 429)
   }
 
   const expiresAt = getExpiresAt(mode)
@@ -313,6 +336,12 @@ async function cleanupExpired(env: Bindings) {
   const result = await env.DB.prepare(
     "DELETE FROM pickup_codes WHERE expires_at <= datetime('now')"
   ).run()
+
+  // Purge rate-limit buckets older than 24h so the table doesn't grow unbounded
+  const windowSec = parseInt(env.RATE_LIMIT_WINDOW || '3600', 10)
+  const cutoffWindow = Math.floor(Date.now() / 1000 / windowSec) - Math.floor(86400 / windowSec)
+  await env.DB.prepare('DELETE FROM rate_limits WHERE window_start <= ?').bind(cutoffWindow).run()
+
   console.log(`[Cleanup] deleted ${result.meta.changes} codes, ${deletedFolders} folders`)
   return result.meta.changes
 }

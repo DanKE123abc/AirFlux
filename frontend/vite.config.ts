@@ -9,4 +9,16 @@ export default defineConfig({
       '/api': 'http://127.0.0.1:8787',
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom'],
+          peerjs: ['peerjs'],
+          qrcode: ['qrcode'],
+          vditor: ['vditor'],
+        },
+      },
+    },
+  },
 })
